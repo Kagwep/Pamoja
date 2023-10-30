@@ -38,12 +38,19 @@ contract BusinessVerificationContract {
         uint paymentDate;
     }
 
+    struct Vote {
+        address voter;      // The address of the voter
+        uint256 option;     // The selected option for the vote
+        bool hasVoted;      // Whether the voter has already cast a vote
+    }
+
     mapping(uint => BusinessListing) public businessListings;
     mapping(uint => Verification) public businessVerifications;
     mapping(uint => Fund) public businessFunds;
     mapping(uint => uint) public businessVotes;
     mapping(uint => ShareReturn) public shareReturns;
     mapping(uint => PaySchedule) public paySchedules;
+    mapping(address => Vote) public votes;
 
     constructor() {
         owner = msg.sender;
@@ -58,12 +65,13 @@ contract BusinessVerificationContract {
     event BusinessPassed(uint businessId);
     event SharePaid(uint businessId, uint amount);
     event ShareReduced(uint businessId, uint amount);
+    event Voted(address indexed voter, uint256 option);
 
     function createBusinessListing(string memory _name, address payable _businessAddress, uint _fundAmountRequest) external {
         uint newBusinessId = nextBusinessId;
         nextBusinessId++;
 
-        businessListings[newBusinessId] = BusinessListing(newBusinessId, _name, msg.sender, _fundAmountRequest, _businessAddress, 0);
+        businessListings[newBusinessId] = BusinessListing(newBusinessId, _name, msg.sender, _fundAmountRequest, _businessAddress, 100);
     }
 
     function verifyBusiness(uint _businessId, string memory _verificationFile) external onlyOwner {
