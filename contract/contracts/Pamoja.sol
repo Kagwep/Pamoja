@@ -5,7 +5,9 @@ contract BusinessVerificationContract {
     address public owner;
     uint public contractBalance; // To keep track of the contract's balance
     uint private nextBusinessId = 1;
+    uint256 private voteCounter;
 
+    // Define your BusinessListing struct and storage as you've provided earlier.
     struct BusinessListing {
         uint businessId;
         string name;
@@ -16,9 +18,26 @@ contract BusinessVerificationContract {
     }
 
     struct Verification {
-        uint businessId;
+        uint256 businessId;
         string verificationFile;
         bool isVerified;
+        uint256 voteCount; // Number of votes for verification
+    }
+
+    struct DevelopmentRoadmap {
+        uint256 businessId;
+        string DevelopmentRoadmapFile;
+        bool isVerified;
+        uint256 voteCount; // Number of votes for verification
+        uint256 targetVote;
+    }
+
+    struct Regular {
+        uint256 businessId;
+        string votePurpose;
+        bool isVerified;
+        uint256 voteCount; // Number of votes for verification
+        uint256 targetVote;
     }
 
     struct Fund {
@@ -39,10 +58,13 @@ contract BusinessVerificationContract {
     }
 
     struct Vote {
-        address voter;      // The address of the voter
-        uint256 option;     // The selected option for the vote
-        bool hasVoted;      // Whether the voter has already cast a vote
+        uint256 voteId;
+        uint256 option;
+        uint256 businessId;
+        bool hasVoted;
     }
+
+    enum VoteType { Regular, Verification, DevelopmentRoadmap }
 
     mapping(uint => BusinessListing) public businessListings;
     mapping(uint => Verification) public businessVerifications;
@@ -50,7 +72,10 @@ contract BusinessVerificationContract {
     mapping(uint => uint) public businessVotes;
     mapping(uint => ShareReturn) public shareReturns;
     mapping(uint => PaySchedule) public paySchedules;
-    mapping(address => Vote) public votes;
+    mapping(address => mapping(VoteType => Vote)) votes;
+    mapping(uint256 => DevelopmentRoadmap) public developmentRoadmaps;
+    mapping(uint256 => Regular) public regularVotes;
+
 
     constructor() {
         owner = msg.sender;
@@ -60,6 +85,11 @@ contract BusinessVerificationContract {
         require(msg.sender == owner, "Only the contract owner can perform this action");
         _;
     }
+
+    event Voted(uint256 indexed voteId, address indexed voter, uint256 option, uint256 businessId, VoteType voteType);
+    event BusinessVerified(uint256 businessId);
+    event DevelopmentRoadmapVerified(uint256 businessId);
+    event RegularVerified(uint256 businessId);
 
     event BusinessFunded(uint businessId, uint amount);
     event BusinessPassed(uint businessId);
@@ -72,6 +102,61 @@ contract BusinessVerificationContract {
         nextBusinessId++;
 
         businessListings[newBusinessId] = BusinessListing(newBusinessId, _name, msg.sender, _fundAmountRequest, _businessAddress, 100);
+    }
+
+
+    function vote(uint256 selectedOption, uint256 businessId, VoteType voteType) public {
+        require(voteType == VoteType.Regular || voteType == VoteType.Verification || voteType == VoteType.DevelopmentRoadmap, "Invalid vote type");
+
+        voteCounter++;
+        votes[msg.sender][voteType] = Vote({
+            voteId: voteCounter,
+            option: selectedOption,
+            businessId: businessId,
+            hasVoted: true
+        });
+
+        emit Voted(voteCounter, msg.sender, selectedOption, businessId, voteType);
+
+        if (voteType == VoteType.Verification) {
+            require(
+                !votes[msg.sender][VoteType.Verification].hasVoted &&
+                votes[msg.sender][VoteType.Verification].businessId != businessId,
+                "You have already voted for Verification for this business."
+            );
+            businessVerifications[businessId].voteCount++;
+            if (businessVerifications[businessId].voteCount >= calculateVerificationThreshold(businessId)) {
+                businessVerifications[businessId].isVerified = true;
+                emit BusinessVerified(businessId);
+            }
+        }else if (voteType == VoteType.DevelopmentRoadmap) {
+            require(
+                !votes[msg.sender][VoteType.DevelopmentRoadmap].hasVoted &&
+                votes[msg.sender][VoteType.DevelopmentRoadmap].businessId != businessId,
+                "You have already voted for DevelopmentRoadmap for this business."
+            );
+            developmentRoadmaps[businessId].voteCount++;
+            if (developmentRoadmaps[businessId].voteCount >= developmentRoadmaps[businessId].targetVote) {
+                developmentRoadmaps[businessId].isVerified = true;
+                emit DevelopmentRoadmapVerified(businessId);
+            }
+        } else if (voteType == VoteType.Regular) {
+            require(
+                !votes[msg.sender][VoteType.Regular].hasVoted &&
+                votes[msg.sender][VoteType.Regular].businessId != businessId,
+                "You have already voted for Regular for this business."
+            );
+            regularVotes[businessId].voteCount++;
+            if (regularVotes[businessId].voteCount >= regularVotes[businessId].targetVote) {
+                regularVotes[businessId].isVerified = true;
+                emit RegularVerified(businessId);
+            }
+        }
+    }
+
+    function calculateVerificationThreshold(uint256 businessId) public view returns (uint256) {
+        BusinessListing storage business = businessListings[businessId];
+        return business.fundAmountRequest / 10; // Adjust the formula as needed
     }
 
     function verifyBusiness(uint _businessId, string memory _verificationFile) external onlyOwner {
